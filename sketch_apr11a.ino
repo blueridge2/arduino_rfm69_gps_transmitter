@@ -1,0 +1,348 @@
+// rf69 demo tx rx.pde
+// -*- mode: C++ -*-
+// Example sketch showing how to create a simple addressed, reliable messaging client
+// with the RH_RF69 class. RH_RF69 class does not provide for addressing or
+// reliability, so you should only use RH_RF69  if you do not need the higher
+// level messaging abilities.
+// It is designed to work with the other example rf69_server.
+// Demonstrates the use of AES encryption, setting the frequency and modem 
+// configuration
+/**
+ * @file sketch_apra.ino
+ * @author Ralph Blach
+ * @date April 15, 2019
+ * @brief This is a program to receive gps information on an Arduino ans transmit it on a 
+ * rfm69 radio
+ *
+ * 
+ */
+#include <SPI.h>
+#include <RH_RF69.h>
+#include <RHReliableDatagram.h>
+#define GPSSerial Serial1
+#define GPS_DATA_SIZE 100
+#define ARRAY_SIZE 15
+
+/************ Radio Setup ***************/
+
+// Change to 434.0 or other frequency, must match RX's freq!
+#define RF69_FREQ 433.0
+
+// Where to send packets to!
+#define DEST_ADDRESS   1
+// change addresses for each client board, any number :)
+#define MY_ADDRESS     2
+
+
+#if defined (__AVR_ATmega32U4__) // Feather 32u4 w/Radio
+  #define RFM69_CS      8
+  #define RFM69_INT     7
+  #define RFM69_RST     4
+  #define LED           13
+#endif
+
+#if defined(ADAFRUIT_FEATHER_M0) // Feather M0 w/Radio
+  #define RFM69_CS      8
+  #define RFM69_INT     3
+  #define RFM69_RST     4
+  #define LED           13
+#endif
+
+#if defined (__AVR_ATmega328P__)  // Feather 328P w/wing
+  #define RFM69_INT     3  // 
+  #define RFM69_CS      4  //
+  #define RFM69_RST     2  // "A"
+  #define LED           13
+#endif
+
+#if defined(ESP8266)    // ESP8266 feather w/wing
+  #define RFM69_CS      2    // "E"
+  #define RFM69_IRQ     15   // "B"
+  #define RFM69_RST     16   // "D"
+  #define LED           0
+#endif
+
+#if defined(ESP32)    // ESP32 feather w/wing
+  #define RFM69_RST     13   // same as LED
+  #define RFM69_CS      33   // "B"
+  #define RFM69_INT     27   // "A"
+  #define LED           13
+#endif
+
+/* Teensy 3.x w/wing
+#define RFM69_RST     9   // "A"
+#define RFM69_CS      10   // "B"
+#define RFM69_IRQ     4    // "C"
+#define RFM69_IRQN    digitalPinToInterrupt(RFM69_IRQ )
+*/
+ 
+/* WICED Feather w/wing 
+#define RFM69_RST     PA4     // "A"
+#define RFM69_CS      PB4     // "B"
+#define RFM69_IRQ     PA15    // "C"
+#define RFM69_IRQN    RFM69_IRQ
+*/
+
+// Singleton instance of the radio driver
+RH_RF69 rf69(RFM69_CS, RFM69_INT);
+
+// Class to manage message delivery and receipt, using the driver declared above
+RHReliableDatagram rf69_manager(rf69, MY_ADDRESS);
+
+
+int16_t packetnum = 0;  // packet counter, we increment per xmission
+
+void setup() 
+{
+  /**
+ * @brief This is the setup program for the Arduino
+ * 
+ * This program sets only 
+ *  - Sets up the debug serial port 115200
+ *  - Sets up the GPS serial port to 9600 baud
+ *  - output GMRC packets
+ *  - only output once every 10 seconds
+ * 
+ * @return @c NULL is always returned.
+ */
+  char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+  char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
+  int index;
+  int j_index;
+  char chr_to_send;
+  // 9600 baud is the default rate for the Ultimate GPS
+  GPSSerial.begin(9600);
+  Serial.begin(115200);
+  while (!Serial) { delay(1); } // wait until serial console is open, remove if not tethered to computer
+  // only send GPRMC  packets
+  for(j_index=0; j_index<3; j_index++)
+  {
+    //Serial.println("Sending init data to gps");
+    //Serial.println(gps_init_data);
+    for (index=0; index<strlen(gps_init_data); index++)
+    {
+      GPSSerial.write(gps_init_data[index]);
+    }
+  }
+  // initial the GPS radio to only send updates once every 10 seconds
+  for(j_index=0; j_index<3; j_index++)
+  {
+    //Serial.println("Sending update rate to gps");
+    //Serial.println(gps_init_data);
+    for (index=0; index<sizeof(gps_update_rate); index++)
+    {
+      GPSSerial.write(gps_update_rate[index]);
+    }
+  }
+  pinMode(LED, OUTPUT);     
+  pinMode(RFM69_RST, OUTPUT);
+  digitalWrite(RFM69_RST, LOW);
+
+  Serial.println("Feather Addressed RFM69 TX Test!");
+  Serial.println();
+
+  // manual reset the radio
+  digitalWrite(RFM69_RST, HIGH);
+  delay(10);
+  digitalWrite(RFM69_RST, LOW);
+  delay(10);
+  
+  if (!rf69_manager.init()) {
+    Serial.println("RFM69 radio init failed");
+    while (1);
+  }
+  Serial.println("RFM69 radio init OK!");
+  // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
+  // No encryption
+  if (!rf69.setFrequency(RF69_FREQ)) {
+    Serial.println("setFrequency failed");
+  }
+
+  // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
+  // ishighpowermodule flag set like this:
+  rf69.setTxPower(20, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
+  
+  pinMode(LED, OUTPUT);
+
+  Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");
+}
+
+
+// Dont put this on the stack:
+uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
+uint8_t data[] = "  OK";
+
+void loop() {
+  char gps_data[GPS_DATA_SIZE];
+  char *gps_parsed_data[ARRAY_SIZE];
+  char gps_char;
+  uint16_t index;
+  uint16_t gps_char_index = 0;
+  char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "kf4wbk#";
+  
+  // set the gps data to zero befor receive.
+  memset(gps_data, 0, sizeof(gps_data));
+  
+  while(1)
+  {  
+    // Read the serial data from the serial port attached to the software serial port.
+    if (GPSSerial.available()) 
+    {
+      gps_char = GPSSerial.read();
+      //Serial.print("char=");Serial.write(gps_char);Serial.print("\n");
+      // if it is a new line character continue
+      if (gps_char == 13)
+        continue;
+     
+      // if it is a line feed, stop we have the packet
+      if (gps_char == 10)
+      {
+        //Serial.println("Got return");
+        if (strncmp(gps_data,"$GPRMC", 6) != 0)
+        {
+          gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
+          //Serial.println("Got a continue");
+          continue;
+        }
+        else
+          break;
+      }
+      // make sure we never have a data overun.  Buffer overflows are nasty.
+      if (gps_char_index < GPS_DATA_SIZE-3)
+        gps_data[gps_char_index++] = gps_char;
+       else
+        gps_data[gps_char_index] = gps_char; 
+    }
+  }
+  gps_data[gps_char_index++] = 0; //make the gps data null terminated
+  //Serial.println(gps_data);
+  // now parse the data into a array of character pointers.
+  setup_and_parse(gps_data, gps_parsed_data);
+  for (index=0; index < ARRAY_SIZE; index++)
+    {
+        if (gps_parsed_data[index] == NULL)
+        {
+            break;
+        }
+        Serial.print("Gps data=");Serial.println(gps_parsed_data[index]);
+        
+    }
+  // a little explantion here, gps_parsed data[2] is a pointer to a c string.
+  // this string will always contain either an singe C string, "A" or "V".  If the string contains 
+  // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster
+  radiopacket[0] = 0;  
+  if (gps_parsed_data[2][0] == 'A')
+  {
+    for (index=3; index<3+4; index++)
+    {
+      strcat(radiopacket, gps_parsed_data[index]);
+      strcat(radiopacket,",");
+    }
+  }
+  else
+    for (index=0; index<3; index++)
+      strcat(radiopacket, gps_parsed_data[index]);
+      
+  //itoa(packetnum++, radiopacket+13, 10);
+  //Serial.print("Sending "); Serial.println(radiopacket);
+  
+  // Send a message to the DESTINATION!
+  if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
+    // Now wait for a reply from the server
+    uint8_t len = sizeof(buf);
+    uint8_t from;   
+    if (rf69_manager.recvfromAckTimeout(buf, &len, 2000, &from)) {
+      buf[len] = 0; // zero out remaining string
+      
+      //Serial.print("Got reply from #"); Serial.print(from);
+      //Serial.print(" [RSSI :");
+      //Serial.print(rf69.lastRssi());
+      //Serial.print("] : ");
+      //Serial.println((char*)buf);     
+      Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
+    } else {
+      Serial.println("No reply, is anyone listening?");
+    }
+  } else {
+    Serial.println("Sending failed (no ack)");
+  }
+}
+int setup_and_parse( char *gps_data, char *gps_parsed_data[])
+{
+  /**
+ * @brief this initialized the array of indexes to a NULL.  This uses a loop and sets to NULL
+ * because a NULL pointer could be different than a zero
+ * If you have verified that a NULL pointer is a zero, the you could use a memset for this operation
+ *
+ * @param char *gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
+ * @param char *array_pointer[]  an array of character pointers which will contain the address of the tokens
+ * 
+ * @return always 0
+ */
+    unsigned char index;
+    for (index=0; index < ARRAY_SIZE; index ++)
+    {
+        gps_parsed_data[index] = NULL;
+    }
+    parse_gps_data(gps_data, gps_parsed_data);
+    
+    //for (index=0; index< ARRAY_SIZE; index++)
+    //{
+    //    if (gps_parsed_data[index] == NULL)
+    //    {
+    //        break;
+    //    }
+    //}
+    return 0;
+} 
+int parse_gps_data(char *gps_raw_data, char *array_pointers[])
+/**
+ * @brief this function will tokenize a gps string 
+ * 
+ * This function will tokenize a NEMA sentence and place the start address in array pointers.
+ * the commans in the string are replace by a zero, so the strings become null terminate.
+ *
+ * @param char *gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
+ * @param char *array_pointer[]  an array of character pointers which will contain the address of the tokens
+ * 
+ * @return always 0
+ */
+{
+    unsigned char array_pointer_index = 0;  // the sub index tracks the pointer into the array of pointers
+    char comma = ',';
+    unsigned char index;
+    uint16_t length_of_raw_data = strlen(gps_raw_data);
+    array_pointers[array_pointer_index++] = gps_raw_data;
+    for (index=0; index< length_of_raw_data; index++)
+    {
+        if (gps_raw_data[index] == comma) 
+        {
+            // if the current is a comma, and the next is anything not a comma, 
+            // then put the address of the next character in the array_pointers and increment 
+            // the index
+            if (gps_raw_data[index + 1] != comma)
+            {
+                array_pointers[array_pointer_index++] = gps_raw_data + index + 1;
+            }
+            // replace the comma with a 0 zero so token is null terminate.
+            // this will handle multile commans and make sure all commas are set to zero
+            gps_raw_data[index] = 0;
+            // make sure we dont exceed the array of pointer size.
+            if (array_pointer_index >= ARRAY_SIZE)
+            {
+              break;  
+            }
+        }
+    }
+    return 0;
+}
+   
+
+void Blink(byte PIN, byte DELAY_MS, byte loops) {
+  for (byte i=0; i<loops; i++)  {
+    digitalWrite(PIN,HIGH);
+    delay(DELAY_MS);
+    digitalWrite(PIN,LOW);
+    delay(DELAY_MS);
+  }
+}
