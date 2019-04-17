@@ -1,13 +1,4 @@
-// rf69 demo tx rx.pde
-// -*- mode: C++ -*-
-// Example sketch showing how to create a simple addressed, reliable messaging client
-// with the RH_RF69 class. RH_RF69 class does not provide for addressing or
-// reliability, so you should only use RH_RF69  if you do not need the higher
-// level messaging abilities.
-// It is designed to work with the other example rf69_server.
-// Demonstrates the use of AES encryption, setting the frequency and modem 
-// configuration
-/**
+ /*
  * @file sketch_apra.ino
  * @author Ralph Blach
  * @date April 15, 2019
@@ -169,17 +160,26 @@ void setup()
 
 
 // Dont put this on the stack:
-uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
+uint8_t reply_buffer[RH_RF69_MAX_MESSAGE_LEN];
+uint8_t reply_buffer_len = sizeof(reply_buffer);
 uint8_t data[] = "  OK";
+const char comma = ',';
+// the following data structures do not need to be reallocated every time
+//                                           0123456
+char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "kf4wbk#";
+char gps_data[GPS_DATA_SIZE];
+       
 
 void loop() {
-  char gps_data[GPS_DATA_SIZE];
   char *gps_parsed_data[ARRAY_SIZE];
   char gps_char;
+  uint8_t number_of_tokens;
   uint16_t index;
+  uint8_t reply_buffer_len;
   uint16_t gps_char_index = 0;
-  char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "kf4wbk#";
-  
+  // terminate the radio packet with a 0,  after it has been used once it will have data after the #
+  // this saves the slow auto intilaizaton of the packet ever time
+  radiopacket[7] = 0; 
   // set the gps data to zero befor receive.
   memset(gps_data, 0, sizeof(gps_data));
   
@@ -217,8 +217,8 @@ void loop() {
   gps_data[gps_char_index++] = 0; //make the gps data null terminated
   //Serial.println(gps_data);
   // now parse the data into a array of character pointers.
-  setup_and_parse(gps_data, gps_parsed_data);
-  for (index=0; index < ARRAY_SIZE; index++)
+  number_of_tokens = parse_gps_data(gps_data, gps_parsed_data);
+  for (index=0; index < number_of_tokens; index++)
     {
         if (gps_parsed_data[index] == NULL)
         {
@@ -249,16 +249,16 @@ void loop() {
   // Send a message to the DESTINATION!
   if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
     // Now wait for a reply from the server
-    uint8_t len = sizeof(buf);
+     reply_buffer_len = sizeof(reply_buffer);
     uint8_t from;   
-    if (rf69_manager.recvfromAckTimeout(buf, &len, 2000, &from)) {
-      buf[len] = 0; // zero out remaining string
+    if (rf69_manager.recvfromAckTimeout(reply_buffer, &reply_buffer_len, 2000, &from)) {
+      reply_buffer[reply_buffer_len] = 0; // zero out remaining string
       
       //Serial.print("Got reply from #"); Serial.print(from);
       //Serial.print(" [RSSI :");
       //Serial.print(rf69.lastRssi());
       //Serial.print("] : ");
-      //Serial.println((char*)buf);     
+      //Serial.println((char*)reply_buffer);     
       Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
     } else {
       Serial.println("No reply, is anyone listening?");
@@ -267,40 +267,14 @@ void loop() {
     Serial.println("Sending failed (no ack)");
   }
 }
-int setup_and_parse( char *gps_data, char *gps_parsed_data[])
-{
-  /**
- * @brief this initialized the array of indexes to a NULL.  This uses a loop and sets to NULL
- * because a NULL pointer could be different than a zero
- * If you have verified that a NULL pointer is a zero, the you could use a memset for this operation
- *
- * @param char *gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
- * @param char *array_pointer[]  an array of character pointers which will contain the address of the tokens
- * 
- * @return always 0
- */
-    unsigned char index;
-    for (index=0; index < ARRAY_SIZE; index ++)
-    {
-        gps_parsed_data[index] = NULL;
-    }
-    parse_gps_data(gps_data, gps_parsed_data);
-    
-    //for (index=0; index< ARRAY_SIZE; index++)
-    //{
-    //    if (gps_parsed_data[index] == NULL)
-    //    {
-    //        break;
-    //    }
-    //}
-    return 0;
-} 
-int parse_gps_data(char *gps_raw_data, char *array_pointers[])
+
+// the char *const says the pointer cannot be changed, but the data can
+int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
 /**
  * @brief this function will tokenize a gps string 
  * 
  * This function will tokenize a NEMA sentence and place the start address in array pointers.
- * the commans in the string are replace by a zero, so the strings become null terminate.
+ * the commas in the string are replace by a zero, so the strings become null terminate.
  *
  * @param char *gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
  * @param char *array_pointer[]  an array of character pointers which will contain the address of the tokens
@@ -309,7 +283,7 @@ int parse_gps_data(char *gps_raw_data, char *array_pointers[])
  */
 {
     unsigned char array_pointer_index = 0;  // the sub index tracks the pointer into the array of pointers
-    char comma = ',';
+    //char comma = ',';
     unsigned char index;
     uint16_t length_of_raw_data = strlen(gps_raw_data);
     array_pointers[array_pointer_index++] = gps_raw_data;
@@ -334,7 +308,8 @@ int parse_gps_data(char *gps_raw_data, char *array_pointers[])
             }
         }
     }
-    return 0;
+    // return the number of tokens that we have parsed, that is the array_pointer_index
+    return array_pointer_index;
 }
    
 
