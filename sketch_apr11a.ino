@@ -1,25 +1,47 @@
- /*
- * @file sketch_apra.ino
+ /**
+  * @file  sketch_apr11a.ino
  * @author Ralph Blach
  * @date April 15, 2019
- * @brief This is a program to receive gps information on an Arduino ans transmit it on a 
+ * @brief This is a program to receive gps information on an Arduino(R) and transmit it on a 
  * rfm69 radio
- *
  * 
- */
+ * This program uses a Adafruit(R) feather wings GPS bonnet with a GlobalTop(R) MTK3339 on on it.   
+ * 
+ *
+ **/
 #include <SPI.h>
 #include <RH_RF69.h>
 #include <RHReliableDatagram.h>
+/**
+ * @brief  create a name for the gpsSerial port
+ * @param GPSSerial
+ */
 #define GPSSerial Serial1
-#define GPS_DATA_SIZE 100
+/**
+ * @brief this is the size of the data buffer where the data from the MK3339 will be placed.
+ * @param GPS_RECEIVER_BUFFER_SIZE
+ */
+#define GPS_RECEIVER_BUFFER_SIZE 100
+#define GPSSerial Serial1
+/**
+ * @brief this is the number of array entries for the tokenizer.  you can have 15 tokens
+ * @param ARRAY_SIZE
+ */
 #define ARRAY_SIZE 15
 
 /************ Radio Setup ***************/
-
+/**
+ * @brief radio frequency
+ * @param RF69_FREQ
+ */
 // Change to 434.0 or other frequency, must match RX's freq!
 #define RF69_FREQ 433.0
 
 // Where to send packets to!
+/**
+ * @brief destination address
+ * @param DEST_ADDRESS
+ */
 #define DEST_ADDRESS   1
 // change addresses for each client board, any number :)
 #define MY_ADDRESS     2
@@ -85,7 +107,7 @@ int16_t packetnum = 0;  // packet counter, we increment per xmission
 
 void setup() 
 {
-  /**
+/**
  * @brief This is the setup program for the Arduino
  * 
  * This program sets only 
@@ -94,9 +116,11 @@ void setup()
  *  - output GMRC packets
  *  - only output once every 10 seconds
  * 
- * @return @c NULL is always returned.
+ * @return Nothing
  */
+ // set up the GPS to only transmit GPRMC packets.  Thats all thats needed
   char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+ // set the the gps to only transmit once every 10 seconds.
   char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
   int index;
   int j_index;
@@ -159,29 +183,41 @@ void setup()
 }
 
 
-// Dont put this on the stack:
+// Dont put these on the stack, they only need to be allocated once.
 uint8_t reply_buffer[RH_RF69_MAX_MESSAGE_LEN];
-uint8_t reply_buffer_len = sizeof(reply_buffer);
 uint8_t data[] = "  OK";
 const char comma = ',';
+char *gps_parsed_data[ARRAY_SIZE];
+
+// this is my ham call sign, and this is necessary for 433 mhz, in the US.  If you are not a ham radio operator
+// in the United States, you cannot use the 433 Mhz radio and you cannot use my call sign.  If you are outside the US, 
+// you need to know the rules in your country.
 // the following data structures do not need to be reallocated every time
 //                                           0123456
 char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "kf4wbk#";
-char gps_data[GPS_DATA_SIZE];
+char gps_data[GPS_RECEIVER_BUFFER_SIZE];
        
 
 void loop() {
-  char *gps_parsed_data[ARRAY_SIZE];
+  /**
+ * @brief This is the loop subrourine
+ * 
+ * This program receives the data from the gps receiver,parses it, and sends it to Node 2 on the 
+ * network.  Because this is running on the Ham band, it does not encrpt.
+ * 
+ * @return Nothing
+ */
   char gps_char;
   uint8_t number_of_tokens;
   uint16_t index;
-  uint8_t reply_buffer_len;
   uint16_t gps_char_index = 0;
+  uint8_t reply_buffer_len; //this might be modified by the transmit program
   // terminate the radio packet with a 0,  after it has been used once it will have data after the #
   // this saves the slow auto intilaizaton of the packet ever time
   radiopacket[7] = 0; 
   // set the gps data to zero befor receive.
   memset(gps_data, 0, sizeof(gps_data));
+  reply_buffer_len = sizeof(reply_buffer);
   
   while(1)
   {  
@@ -208,16 +244,17 @@ void loop() {
           break;
       }
       // make sure we never have a data overun.  Buffer overflows are nasty.
-      if (gps_char_index < GPS_DATA_SIZE-3)
+      if (gps_char_index < GPS_RECEIVER_BUFFER_SIZE-3)
         gps_data[gps_char_index++] = gps_char;
        else
         gps_data[gps_char_index] = gps_char; 
     }
   }
   gps_data[gps_char_index++] = 0; //make the gps data null terminated
-  //Serial.println(gps_data);
+  Serial.println(gps_data);
   // now parse the data into a array of character pointers.
   number_of_tokens = parse_gps_data(gps_data, gps_parsed_data);
+#if defined(DEBUG)
   for (index=0; index < number_of_tokens; index++)
     {
         if (gps_parsed_data[index] == NULL)
@@ -227,29 +264,31 @@ void loop() {
         Serial.print("Gps data=");Serial.println(gps_parsed_data[index]);
         
     }
+#endif
   // a little explantion here, gps_parsed data[2] is a pointer to a c string.
   // this string will always contain either an singe C string, "A" or "V".  If the string contains 
-  // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster
-  radiopacket[0] = 0;  
+  // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster 
   if (gps_parsed_data[2][0] == 'A')
-  {
+  { // indexes 3, 4, 5, and 6 have the gps data
     for (index=3; index<3+4; index++)
     {
       strcat(radiopacket, gps_parsed_data[index]);
-      strcat(radiopacket,",");
+      // do not put the comma after the last data
+      if (index < 6)
+        strcat(radiopacket,",");
     }
   }
   else
+  {
     for (index=0; index<3; index++)
+    {
       strcat(radiopacket, gps_parsed_data[index]);
-      
-  //itoa(packetnum++, radiopacket+13, 10);
-  //Serial.print("Sending "); Serial.println(radiopacket);
-  
+    }
+  }
   // Send a message to the DESTINATION!
   if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
     // Now wait for a reply from the server
-     reply_buffer_len = sizeof(reply_buffer);
+    reply_buffer_len = sizeof(reply_buffer);
     uint8_t from;   
     if (rf69_manager.recvfromAckTimeout(reply_buffer, &reply_buffer_len, 2000, &from)) {
       reply_buffer[reply_buffer_len] = 0; // zero out remaining string
@@ -259,7 +298,7 @@ void loop() {
       //Serial.print(rf69.lastRssi());
       //Serial.print("] : ");
       //Serial.println((char*)reply_buffer);     
-      Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
+      Blink(LED, 100, 3); //blink LED 3 times, 40ms between blinks
     } else {
       Serial.println("No reply, is anyone listening?");
     }
@@ -273,11 +312,33 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
 /**
  * @brief this function will tokenize a gps string 
  * 
+ * The gps string is in the form of 
+ * 012345678901234567890
+ * $GPRMC,023936.000,A,1111.1234,N,12345.4321,W,0.54,243.41,180419,,,A*74
+ *
+ * The commans in the string will be set to 0, breaking the string in to multiple strings.
+ * Each entry on char ** const array_pointer will point to the start of the data of each string.
+ * The address of each string is just he starting address of the gps_raw_data + index of beginnig of 
+ * each string
+ * so array_pointer[0] = &$GPMRC      (address of gps_raw_data)
+ *    array_pointer[1] = &023936.000  (address of gps_raw-data + 7)
+ *    array_pointer[2] = &A           (address of gps_raw_data + 18)
+ * 
  * This function will tokenize a NEMA sentence and place the start address in array pointers.
  * the commas in the string are replace by a zero, so the strings become null terminate.
+ *     | Value Nema sentence | index in token array_pointers |
+ *     |:-------------------:|:-----------------------------:|
+ *     |Nema sentence name |0|
+ *     |utc_time           |1|
+ *     |active             |2|
+ *     |lattitude          |3|
+ *     |n/s indicator      |4|
+ *     |logitude           |5|
+ *     |e/w indicator      |6|
  *
- * @param char *gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
- * @param char *array_pointer[]  an array of character pointers which will contain the address of the tokens
+ * @param char *const gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
+ *             the pointer is a const, whilst the data is not
+ * @param char ** const array_pointer  an array of character pointers which will contain the address of the tokens
  * 
  * @return always 0
  */
