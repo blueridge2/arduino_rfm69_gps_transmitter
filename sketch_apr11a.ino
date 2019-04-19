@@ -1,7 +1,6 @@
 /**
- *  Copyright 2019 by Ralph Blach
- *   
-    @file  sketch_apr11a.ino
+ *  
+ *  @file  sketch_apr11a.ino
     @author Ralph Blach
     @date April 15, 2019
     @brief This program uses a Adafruit(R) feather wings with an rfm69 radio a GPS bonnet 
