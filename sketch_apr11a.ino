@@ -286,18 +286,19 @@ void loop() {
     if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
         // Now wait for a reply from the server
         reply_buffer_len = sizeof(reply_buffer);
-        uint8_t from;
-        if (rf69_manager.recvfromAckTimeout(reply_buffer, &reply_buffer_len, 2000, &from)) {
-            reply_buffer[reply_buffer_len] = 0; // zero out remaining string
-            //Serial.print("Got reply from #"); Serial.print(from);
-            //Serial.print(" [RSSI :");
-            //Serial.print(rf69.lastRssi());
-            //Serial.print("] : ");
-            //Serial.println((char*)reply_buffer);
-            Blink(LED, 100, 3); //blink LED 3 times, 40ms between blinks
-        } else {
-            Serial.println("No reply, is anyone listening?");
-        }
+        Serial.print("got an ack");
+        //uint8_t from;
+        //if (rf69_manager.recvfromAckTimeout(reply_buffer, &reply_buffer_len, 2000, &from)) {
+        //    reply_buffer[reply_buffer_len] = 0; // zero out remaining string
+       //     Serial.print("Got reply from #"); Serial.print(from);
+       //     Serial.print(" [RSSI :");
+        //    Serial.print(rf69.lastRssi());
+        //    Serial.print("] : ");
+        //    Serial.println((char*)reply_buffer);
+        //    Blink(LED, 100, 3); //blink LED 3 times, 40ms between blinks
+        //} else {
+        //    Serial.println("No reply, is anyone listening?");
+        //}
     } else {
         Serial.println("Sending failed (no ack)");
     }
