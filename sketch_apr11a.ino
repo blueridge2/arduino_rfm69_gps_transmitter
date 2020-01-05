@@ -40,9 +40,9 @@
     @brief destination address
     @param DEST_ADDRESS
 */
-#define DEST_ADDRESS   1
+#define DEST_ADDRESS   0x01
 // change addresses for each client board, any number :)
-#define MY_ADDRESS     2
+#define MY_ADDRESS     0x02
 
 
 #if defined (__AVR_ATmega32U4__) // Feather 32u4 w/Radio
@@ -133,6 +133,7 @@ void setup()
     int index;
     int j_index;
     char chr_to_send;
+    uint8_t syncwords []= {0x2d, 0xd4};
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
     Serial.begin(115200);
@@ -186,6 +187,7 @@ void setup()
     // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
     // ishighpowermodule flag set like this:
     rf69.setTxPower(20, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
+    rf69.setSyncWords(syncwords, 2);
 
     pinMode(LED, OUTPUT);
 
@@ -246,7 +248,7 @@ void loop() {
         }
     }
     gps_data[gps_char_index++] = 0; //make the gps data null terminated
-    Serial.println(gps_data);
+    Serial.print("Nema sentence = ");Serial.println(gps_data);
     // now parse the data into a array of character pointers.
     number_of_tokens = parse_gps_data(gps_data, gps_parsed_data);
 #if defined(DEBUG)
