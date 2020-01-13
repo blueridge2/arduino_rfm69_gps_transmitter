@@ -80,20 +80,6 @@
 #define LED           13
 #endif
 
-/*  Teensy 3.x w/wing
-    #define RFM69_RST     9   // "A"
-    #define RFM69_CS      10   // "B"
-    #define RFM69_IRQ     4    // "C"
-    #define RFM69_IRQN    digitalPinToInterrupt(RFM69_IRQ )
-*/
-
-/*  WICED Feather w/wing
-    #define RFM69_RST     PA4     // "A"
-    #define RFM69_CS      PB4     // "B"
-    #define RFM69_IRQ     PA15    // "C"
-    #define RFM69_IRQN    RFM69_IRQ
-*/
-
 // Singleton instance of the radio driver
 RH_RF69 rf69(RFM69_CS, RFM69_INT);
 
