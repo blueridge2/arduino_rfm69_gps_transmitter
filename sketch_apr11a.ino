@@ -10,6 +10,18 @@
 #include <SPI.h>
 #include <RH_RF69.h>
 #include <RHReliableDatagram.h>
+#define DEBUG
+#ifdef DEBUG
+  #define DEBUG_WRITE(x)     Serial.write(x)
+  #define DEBUG_PRINT(x)     Serial.print (x)
+  #define DEBUG_PRINTDEC(x)     Serial.print (x, DEC)
+  #define DEBUG_PRINTLN(x)  Serial.println (x)
+#else
+  #define DEBUG_WRITE(x) 
+  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTDEC(x)
+  #define DEBUG_PRINTLN(x)
+#endif 
 /**
     @brief  create a name for the gpsSerial port
     @param GPSSerial
@@ -20,7 +32,6 @@
     @param GPS_RECEIVER_BUFFER_SIZE
 */
 #define GPS_RECEIVER_BUFFER_SIZE 100
-#define GPSSerial Serial1
 /**
     @brief this is the number of array entries for the tokenizer.  you can have 15 tokens
     @param ARRAY_SIZE
@@ -122,15 +133,18 @@ void setup()
     uint8_t syncwords []= {0x2d, 0xd4};
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
+    
+#if defined (DEBUG)
     Serial.begin(115200);
     while (!Serial) {
         delay(1);    // wait until serial console is open, remove if not tethered to computer
     }
+#endif
     // only send GPRMC  packets
     for (j_index = 0; j_index < 3; j_index++)
     {
-        //Serial.println("Sending init data to gps");
-        //Serial.println(gps_init_data);
+        DEBUG_PRINTLN("Sending init data to gps");
+        DEBUG_PRINTLN(gps_init_data);
         for (index = 0; index < strlen(gps_init_data); index++)
         {
             GPSSerial.write(gps_init_data[index]);
@@ -139,8 +153,8 @@ void setup()
     // initial the GPS radio to only send updates once every 10 seconds
     for (j_index = 0; j_index < 3; j_index++)
     {
-        //Serial.println("Sending update rate to gps");
-        //Serial.println(gps_init_data);
+        DEBUG_PRINTLN("Sending update rate to gps");
+        DEBUG_PRINTLN(gps_init_data);
         for (index = 0; index < sizeof(gps_update_rate); index++)
         {
             GPSSerial.write(gps_update_rate[index]);
@@ -150,8 +164,8 @@ void setup()
     pinMode(RFM69_RST, OUTPUT);
     digitalWrite(RFM69_RST, LOW);
 
-    Serial.println("Feather Addressed RFM69 TX Test!");
-    Serial.println();
+    DEBUG_PRINTLN("Feather Addressed RFM69 TX Test!");
+    DEBUG_PRINTLN();
 
     // manual reset the radio
     digitalWrite(RFM69_RST, HIGH);
@@ -160,24 +174,24 @@ void setup()
     delay(10);
 
     if (!rf69_manager.init()) {
-        Serial.println("RFM69 radio init failed");
+        DEBUG_PRINTLN("RFM69 radio init failed");
         while (1);
     }
-    Serial.println("RFM69 radio init OK!");
+    DEBUG_PRINTLN("RFM69 radio init OK!");
     // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
     // No encryption
     if (!rf69.setFrequency(RF69_FREQ)) {
-        Serial.println("setFrequency failed");
+        DEBUG_PRINTLN("setFrequency failed");
     }
 
     // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
     // ishighpowermodule flag set like this:
-    rf69.setTxPower(20, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
-    rf69.setSyncWords(syncwords, 2);
+    rf69.setTxPower(20, true);    // range from 14-20 for power, 2nd arg must be true for 69HCW
+    rf69.setSyncWords(syncwords, 2);  //set the network,  This must match for all board and this is the default
 
     pinMode(LED, OUTPUT);
 
-    Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");
+    DEBUG_PRINT("RFM69 radio @");  DEBUG_PRINT((int)RF69_FREQ);  DEBUG_PRINTLN(" MHz");
 }
 
 
@@ -208,7 +222,7 @@ void loop() {
         if (GPSSerial.available())
         {
             gps_char = GPSSerial.read();
-            //Serial.print("char=");Serial.write(gps_char);Serial.print("\n");
+            //DEBUG_PRINT("char=");DEBUG_WRITE(gps_char);DEBUG_PRINT("\n");
             // if it is a new line character continue
             if (gps_char == 13)
                 continue;
@@ -216,11 +230,11 @@ void loop() {
             // if it is a line feed, stop we have the packet
             if (gps_char == 10)
             {
-                //Serial.println("Got return");
+                //DEBUG_PRINTLN("Got return");
                 if (strncmp(gps_data, "$GPRMC", 6) != 0)
                 {
                     gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
-                    //Serial.println("Got a continue");
+                    //DEBUG_PRINTLN("Got a continue");
                     continue;
                 }
                 else
@@ -234,7 +248,7 @@ void loop() {
         }
     }
     gps_data[gps_char_index++] = 0; //make the gps data null terminated
-    Serial.print("Nema sentence = ");Serial.println(gps_data);
+    DEBUG_PRINT("Nema sentence = ");DEBUG_PRINTLN(gps_data);
     // now parse the data into a array of character pointers.
     number_of_tokens = parse_gps_data(gps_data, gps_parsed_data);
 #if defined(DEBUG)
@@ -244,7 +258,7 @@ void loop() {
         {
             break;
         }
-        Serial.print("Gps data="); Serial.println(gps_parsed_data[index]);
+        DEBUG_PRINT("Gps data="); DEBUG_PRINTLN(gps_parsed_data[index]);
 
     }
 #endif
@@ -273,7 +287,7 @@ void loop() {
         // Now wait for a reply from the server
         reply_buffer_len = sizeof(reply_buffer);
     } else {
-        Serial.println("Sending failed (no ack)");
+        DEBUG_PRINTLN("Sending failed (no ack)");
     }
 }
 
