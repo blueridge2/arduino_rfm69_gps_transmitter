@@ -266,7 +266,10 @@ void loop() {
     // this string will always contain either an singe C string, "A" or "V".  If the string contains
     // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster
     if (gps_parsed_data[2][0] == 'A')
-    {   // indexes 3, 4, 5, and 6 have the gps data
+    {   
+      // put on an message that the coordinates are good
+      strcat(radiopacket,"A,");
+      // indexes 3, 4, 5, and 6 have the gps data
         for (index = 3; index < 3 + 4; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
@@ -276,7 +279,9 @@ void loop() {
         }
     }
     else
-    {
+    { 
+      // put on a message that the data is bad
+      strcat(radiopacket,"N,");
         for (index = 0; index < 3; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
