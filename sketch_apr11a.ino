@@ -141,25 +141,11 @@ void setup()
     }
 #endif
     // only send GPRMC  packets
-    for (j_index = 0; j_index < 3; j_index++)
-    {
-        DEBUG_PRINTLN("Sending init data to gps");
-        DEBUG_PRINTLN(gps_init_data);
-        for (index = 0; index < strlen(gps_init_data); index++)
-        {
-            GPSSerial.write(gps_init_data[index]);
-        }
-    }
+    write_gps(gps_init_data, 3);
+    
     // initial the GPS radio to only send updates once every 10 seconds
-    for (j_index = 0; j_index < 3; j_index++)
-    {
-        DEBUG_PRINTLN("Sending update rate to gps");
-        DEBUG_PRINTLN(gps_init_data);
-        for (index = 0; index < sizeof(gps_update_rate); index++)
-        {
-            GPSSerial.write(gps_update_rate[index]);
-        }
-    }
+    write_gps(gps_update_rate, 3);
+    
     pinMode(LED, OUTPUT);
     pinMode(RFM69_RST, OUTPUT);
     digitalWrite(RFM69_RST, LOW);
@@ -361,7 +347,28 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     // return the number of tokens that we have parsed, that is the array_pointer_index
     return array_pointer_index;
 }
-
+void write_gps(const char *data, const int retrys)
+/**@brief this writes a data the gps serial port
+ * 
+ * @param const chara * data a pointer to the data to be written to the serial port
+ * @param const int reties the number of times to retry the command 
+ * 
+ * I would send the command atleast 4 times to make sure the gps module get the command
+ * 
+ */
+{
+  int index;
+  int retry_counter;
+  for (retry_counter = 0; retry_counter < retrys; retry_counter++)
+    {
+        DEBUG_PRINTLN("Sending init data to gps");
+        DEBUG_PRINTLN(data);
+        for (index = 0; index < strlen(data); index++)
+        {
+            GPSSerial.write(data[index]);
+        }
+    }
+}
 
 void Blink(byte PIN, byte DELAY_MS, byte loops) 
 /**@brief this function will tokenize a gps string
