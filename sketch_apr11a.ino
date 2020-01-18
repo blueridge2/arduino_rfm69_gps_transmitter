@@ -124,12 +124,10 @@ void setup()
         @return Nothing
     */
     // set up the GPS to only transmit GPRMC packets.  Thats all thats needed
-    char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+    const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
     // set the the gps to only transmit once every 10 seconds.
-    char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
-    int index;
-    int j_index;
-    char chr_to_send;
+    const char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
+    // the sync words for the radio
     uint8_t syncwords []= {0x2d, 0xd4};
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
