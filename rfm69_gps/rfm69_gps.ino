@@ -1,12 +1,17 @@
 /**
  *  
- *  @file  sketch_apr11a.ino
+ *  @file  rfm69_gps.ino
     @author Ralph Blach
     @date April 15, 2019
     @brief This program uses a Adafruit(R) feather wings with an rfm69 radio a GPS bonnet 
        with a GlobalTop(R) MTK3339 on on it.  The Arduino receives and parses the GPS data
        and then transmits it to the the node 1. 
+    @note the i2c has the following setup bytes 0 through 5 have the call sign. if the call sign is shorter put spaces
+          bytes 6 and 7 have the network sync words.
+      byte offset 0  1  2  3  4    5    6    7
+                  g  x  8  a  b    c    0xaa 0xbb
 **/
+#include <EEPROM.h>
 #include <SPI.h>
 #include <RH_RF69.h>
 #include <RHReliableDatagram.h>
@@ -15,11 +20,13 @@
   #define DEBUG_WRITE(x)     Serial.write(x)
   #define DEBUG_PRINT(x)     Serial.print (x)
   #define DEBUG_PRINTDEC(x)     Serial.print (x, DEC)
+  #define DEBUG_PRINTHEX(x)     Serial.print (x, HEX)
   #define DEBUG_PRINTLN(x)  Serial.println (x)
 #else
   #define DEBUG_WRITE(x) 
   #define DEBUG_PRINT(x)
   #define DEBUG_PRINTDEC(x)
+  #define DEBUG_PRINTHEX(x)
   #define DEBUG_PRINTLN(x)
 #endif 
 /**
@@ -107,7 +114,7 @@ char *gps_parsed_data[ARRAY_SIZE];
 // you need to know the rules in your country.
 // the following data structures do not need to be reallocated every time
 //                                           0123456
-char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "kf4wbk,";
+char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "xxxxxx,";
 char gps_data[GPS_RECEIVER_BUFFER_SIZE];
 
 void setup()
@@ -127,10 +134,14 @@ void setup()
     const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
     // set the the gps to only transmit once every 10 seconds.
     const char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
-    // the sync words for the radio
-    uint8_t syncwords []= {0x2d, 0xd4};
+    // the sync words for the radio the default are 0x2d and 0xd4
+    //uint8_t syncwords []= {0x2d, 0xd4};
+    uint8_t syncwords[2] ;
+    int sync_word_index = 0;
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
+    int index = 0;
+    char written;
     
 #if defined (DEBUG)
     Serial.begin(115200);
@@ -138,6 +149,23 @@ void setup()
         delay(1);    // wait until serial console is open, remove if not tethered to computer
     }
 #endif
+    //read the call sign from the eeprom. bytes 0 through 5
+    while (index < 6 )
+    {
+      radiopacket[index] = EEPROM.read(index);
+      DEBUG_PRINT("read ");DEBUG_PRINT(radiopacket[index]);DEBUG_PRINT("from addr=");DEBUG_PRINT(index);DEBUG_PRINT("\n");
+      index++;
+    }
+    radiopacket[index++]=',';
+    radiopacket[index++]=0;
+    // set the index to location 6 to read the sync words bytes 6 and 7
+    index = 6; 
+    syncwords[0] =  EEPROM.read(index);
+    DEBUG_PRINT("read 0x");DEBUG_PRINTHEX(syncwords[0]);DEBUG_PRINT(" from addr=");DEBUG_PRINT(index);DEBUG_PRINT("\n");
+    index = 7;
+    syncwords[1] =  EEPROM.read(index);
+    DEBUG_PRINT("read 0x");DEBUG_PRINTHEX(syncwords[1]);DEBUG_PRINT(" from addr=");DEBUG_PRINT(index);DEBUG_PRINT("\n");
+    
     // only send GPRMC  packets
     write_gps(gps_init_data, 3);
     
@@ -176,6 +204,8 @@ void setup()
     pinMode(LED, OUTPUT);
 
     DEBUG_PRINT("RFM69 radio @");  DEBUG_PRINT((int)RF69_FREQ);  DEBUG_PRINTLN(" MHz");
+    
+    
 }
 
 
