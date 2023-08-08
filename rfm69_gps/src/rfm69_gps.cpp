@@ -29,6 +29,12 @@
   #define DEBUG_PRINTHEX(x)
   #define DEBUG_PRINTLN(x)
 #endif 
+
+// function
+int parse_gps_data(char *const, char **const);
+void write_gps(const char *, const int);
+
+
 /**
     @brief  create a name for the gpsSerial port
     @param GPSSerial
@@ -117,7 +123,7 @@ char *gps_parsed_data[ARRAY_SIZE];
 char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "xxxxxx,";
 char gps_data[GPS_RECEIVER_BUFFER_SIZE];
 
-void setup()
+void rfm_69_setup()
 {
     /**
         @brief This is the setup program for the Arduino
@@ -137,11 +143,11 @@ void setup()
     // the sync words for the radio the default are 0x2d and 0xd4
     //uint8_t syncwords []= {0x2d, 0xd4};
     uint8_t syncwords[2] ;
-    int sync_word_index = 0;
+    //int sync_word_index = 0;
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
     int index = 0;
-    char written;
+    //char written;
     
 #if defined (DEBUG)
     Serial.begin(115200);
@@ -209,7 +215,7 @@ void setup()
 }
 
 
-void loop() {
+void rfm_69_loop() {
     /**
         @brief This is the loop subrourine
 
@@ -222,7 +228,7 @@ void loop() {
     uint8_t number_of_tokens;
     uint16_t index;
     uint16_t gps_char_index = 0;
-    uint8_t reply_buffer_len; //this might be modified by the transmit program
+    uint8_t reply_buffer_len = 0 ; //this might be modified by the transmit program
     // terminate the radio packet with a 0,  after it has been used once it will have data after the #
     // this saves the slow auto intilaizaton of the packet ever time
     radiopacket[7] = 0;
