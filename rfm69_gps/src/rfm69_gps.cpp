@@ -1,6 +1,6 @@
 /**
  *  
- *  @file  rfm69_gps.ino
+ *  @file  rfm69_gps.cpp
     @author Ralph Blach
     @date April 15, 2019
     @brief This program uses a Adafruit(R) feather wings with an rfm69 radio a GPS bonnet 
