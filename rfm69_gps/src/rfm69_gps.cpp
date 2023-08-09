@@ -1,3 +1,5 @@
+/* Copyright 2023 by Ralph Blach under the gpl3 public license. see https://www.gnu.org/licenses/gpl-3.0.en.html#license-text
+for the entire text*/
 /**
  *  
  *  @file  rfm69_gps.cpp
@@ -15,7 +17,7 @@
 #include <SPI.h>
 #include <RH_RF69.h>
 #include <RHReliableDatagram.h>
-#define DEBUG
+#define DEBUG 1
 #ifdef DEBUG
   #define DEBUG_WRITE(x)     Serial.write(x)
   #define DEBUG_PRINT(x)     Serial.print (x)
@@ -30,7 +32,7 @@
   #define DEBUG_PRINTLN(x)
 #endif 
 
-// function
+// function headers
 int parse_gps_data(char *const, char **const);
 void write_gps(const char *, const int);
 
