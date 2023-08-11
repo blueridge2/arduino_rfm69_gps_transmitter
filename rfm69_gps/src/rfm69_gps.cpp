@@ -107,23 +107,28 @@ void write_gps(const char *, const int);
 #endif
 
 // Singleton instance of the radio driver
-RH_RF69 rf69(RFM69_CS, RFM69_INT);
+RH_RF69 rf69(RFM69_CS, RFM69_INT); /*!< Singleton instance of the radio driver */
 
 // Class to manage message delivery and receipt, using the driver declared above
-RHReliableDatagram rf69_manager(rf69, MY_ADDRESS);
+RHReliableDatagram rf69_manager(rf69, MY_ADDRESS);  /*!< Class to manage message delivery and receipt, using the driver declared above */
 
 // Dont put these on the stack, they only need to be allocated once.
-uint8_t reply_buffer[RH_RF69_MAX_MESSAGE_LEN];
+uint8_t reply_buffer[RH_RF69_MAX_MESSAGE_LEN]; /*!< the reply buffer */
 const char comma = ',';
-char *gps_parsed_data[ARRAY_SIZE];
+char *gps_parsed_data[ARRAY_SIZE]; /*!< array where the parsed gps to be transmitted is placed  */
 
 // this is my ham call sign, and this is necessary for 433 mhz, in the US.  If you are not a ham radio operator
 // in the United States, you cannot use the 433 Mhz radio and you cannot use my call sign.  If you are outside the US,
 // you need to know the rules in your country.
 // the following data structures do not need to be reallocated every time
 //                                           0123456
-char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "xxxxxx,";
-char gps_data[GPS_RECEIVER_BUFFER_SIZE];
+
+char radiopacket[RH_RF69_MAX_MESSAGE_LEN] = "xxxxxx,";  /*!< packet to be transmitted */
+
+char gps_data[GPS_RECEIVER_BUFFER_SIZE]; /*!< buffer to contain the received packet */
+/**@def gps_data
+Where the ack packet will go
+*/
 
 void rfm_69_setup()
 {
@@ -347,9 +352,9 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
        |logitude           |5|
        |e/w indicator      |6|
 
-    @param char *const gps_raw_data, a pointer to a null terminated string which contains a NEMA output string
+    @param gps_raw_data a pointer to a null terminated string which contains a NEMA output string
                the pointer is a const, whilst the data is not
-    @param char ** const array_pointer  an array of character pointers which will contain the address of the tokens
+    @param array_pointers  an array of character pointers which will contain the address of the tokens
 
     @return always 0
 */
@@ -386,8 +391,8 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
 void write_gps(const char *data, const int retrys)
 /**@brief this writes a data the gps serial port
  * 
- * @param const chara * data a pointer to the data to be written to the serial port
- * @param const int reties the number of times to retry the command 
+ * @param data a pointer to the data to be written to the serial port
+ * @param retrys the number of times to retry the command 
  * 
  * I would send the command atleast 4 times to make sure the gps module get the command
  * 
