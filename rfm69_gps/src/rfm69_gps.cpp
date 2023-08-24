@@ -6,8 +6,11 @@ for the entire text*/
     @author Ralph Blach
     @date April 15, 2019
     @brief This program uses a Adafruit(R) feather wings with an rfm69 radio a GPS bonnet 
-       with a GlobalTop(R) MTK3339 on on it.  The Arduino receives and parses the GPS data
-       and then transmits it to the the node 1. 
+       with a CDtop PA161D technology gps receiver.  the specificatin is at https://www.cdtop-tech.com/products/pa1616d.  
+       "The CDTop CD-PA1616D module utilizes the MediaTek new generation GNSS Chipset MT3333" quoted from the specification.
+       The command spec for the MT3333 is at https://microchip.ua/simcom/GNSS/Application%20Notes/MT3333%20Platform%20NMEA%20Message%20Specification%20V1.07.pdf
+       
+
     @note the i2c has the following setup bytes 0 through 5 have the call sign. if the call sign is shorter put spaces
           bytes 6 and 7 have the network sync words.
       byte offset 0  1  2  3  4    5    6    7
@@ -34,7 +37,10 @@ for the entire text*/
 
 // function headers
 int parse_gps_data(char *const, char **const);
-void write_gps(const char *, const int);
+void write_gps(const char *, const u32);
+u8 calculate_checksum(const char *, u32);
+u8 bin_to_hex(u8 value);
+
 
 
 /**
@@ -117,6 +123,7 @@ uint8_t reply_buffer[RH_RF69_MAX_MESSAGE_LEN]; /*!< the reply buffer */
 const char comma = ',';
 char *gps_parsed_data[ARRAY_SIZE]; /*!< array where the parsed gps to be transmitted is placed  */
 
+
 // this is my ham call sign, and this is necessary for 433 mhz, in the US.  If you are not a ham radio operator
 // in the United States, you cannot use the 433 Mhz radio and you cannot use my call sign.  If you are outside the US,
 // you need to know the rules in your country.
@@ -143,18 +150,21 @@ void rfm_69_setup()
 
         @return Nothing
     */
-    // set up the GPS to only transmit GPRMC packets.  Thats all thats needed
+    // rmc packets do not work on new gps modules, use  GPGGA packets
+    //                                     0 1 3 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8
+    //                           "$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C"
     const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
     // set the the gps to only transmit once every 10 seconds.
     const char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
     // the sync words for the radio the default are 0x2d and 0xd4
-    //uint8_t syncwords []= {0x2d, 0xd4};
-    uint8_t syncwords[2] ;
+    u8 syncwords []= {0x2d, 0xd4};
+    //uint8_t syncwords[2] ;
     //int sync_word_index = 0;
     // 9600 baud is the default rate for the Ultimate GPS
     GPSSerial.begin(9600);
     int index = 0;
     //char written;
+    u8 checksum;
     
 #if defined (DEBUG)
     Serial.begin(115200);
@@ -179,6 +189,9 @@ void rfm_69_setup()
     syncwords[1] =  EEPROM.read(index);
     DEBUG_PRINT("read 0x");DEBUG_PRINTHEX(syncwords[1]);DEBUG_PRINT(" from addr=");DEBUG_PRINT(index);DEBUG_PRINT("\n");
     
+    // calculate the checksome of the gps data
+    checksum = calculate_checksum(gps_init_data, strlen(gps_init_data));
+    DEBUG_PRINT("checksum = "); DEBUG_PRINTHEX(checksum); DEBUG_PRINT("\n");
     // only send GPRMC  packets
     write_gps(gps_init_data, 3);
     
@@ -246,25 +259,32 @@ void rfm_69_loop() {
     while (1)
     {
         // Read the serial data from the serial port attached to the software serial port.
+         
         if (GPSSerial.available())
         {
+            // DEBUG_PRINT("start gps read");
             gps_char = GPSSerial.read();
-            //DEBUG_PRINT("char=");DEBUG_WRITE(gps_char);DEBUG_PRINT("\n");
-            // if it is a new line character continue
+            // if it is a carriage return character continue
+           
             if (gps_char == 13)
+            {
+                // DEBUG_PRINTLN("carriage returnx");
                 continue;
+            }
 
             // if it is a line feed, stop we have the packet
             if (gps_char == 10)
             {
-                //DEBUG_PRINTLN("Got return");
-                if (strncmp(gps_data, "$GPRMC", 6) != 0)
+                // DEBUG_PRINTLN("line feed");DEBUG_PRINTLN(gps_data);
+                // this can be a GPRMC OR A GNRMC
+                if (strncmp(gps_data+3, "RMC", 3) != 0)
                 {
                     gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
-                    //DEBUG_PRINTLN("Got a continue");
+                    DEBUG_PRINTLN("Got a continue");
                     continue;
                 }
                 else
+                    DEBUG_PRINTLN("Got a break");
                     break;
             }
             // make sure we never have a data overun.  Buffer overflows are nasty.
@@ -362,7 +382,7 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     unsigned char array_pointer_index = 0;  // the sub index tracks the pointer into the array of pointers
     //char comma = ',';
     unsigned char index;
-    uint16_t length_of_raw_data = strlen(gps_raw_data);
+    u16 length_of_raw_data = strlen(gps_raw_data);
     array_pointers[array_pointer_index++] = gps_raw_data;
     for (index = 0; index < length_of_raw_data; index++)
     {
@@ -388,7 +408,7 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     // return the number of tokens that we have parsed, that is the array_pointer_index
     return array_pointer_index;
 }
-void write_gps(const char *data, const int retrys)
+void write_gps(const char *data, const u32 retrys)
 /**@brief this writes a data the gps serial port
  * 
  * @param data a pointer to the data to be written to the serial port
@@ -398,8 +418,8 @@ void write_gps(const char *data, const int retrys)
  * 
  */
 {
-  int index;
-  int retry_counter;
+  u32 index;
+  u32 retry_counter;
   for (retry_counter = 0; retry_counter < retrys; retry_counter++)
     {
         DEBUG_PRINTLN("Sending init data to gps");
@@ -410,7 +430,37 @@ void write_gps(const char *data, const int retrys)
         }
     }
 }
+u8 calculate_checksum(const char * sentence, u32 length)
+{
+    /*this subroutine calculates the checksum of the command 
 
+    * @param sentence a character pointer to the list of characters
+            pass in the entire gps string, it will skip over the $ and subtract outh the *cc\r\n
+      @param length the length of the charaters
+      @return a short with the ascii encoded value in it
+    */
+   u8 checksum = 0;
+   u32 index;
+   u32 real_length = length - 5;
+
+   for (index=1; index < real_length; index++)
+   {
+        checksum = checksum ^ sentence[index];
+   }
+   return checksum;
+}
+u8 bin_to_hex(u8 value)
+{
+    /* return the ascii character value of a bin value
+    @param value
+    @return the ascii value 0x30-39 for 0-9 and A-f for abcdef
+    */
+    if ( value <= 9 )
+        return 0x30 + value;
+    else
+        return 'A' + (value -10);
+
+}
 void Blink(byte PIN, byte DELAY_MS, byte loops) 
 /**@brief this function will tokenize a gps string
  * 
