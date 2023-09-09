@@ -153,7 +153,9 @@ void rfm_69_setup()
     // rmc packets do not work on new gps modules, use  GPGGA packets
     //                                     0 1 3 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8
     //                           "$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C"
-    const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+    // const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+    // set the oupout to be GGA
+    const char gps_init_data[] = "$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
     // set the the gps to only transmit once every 10 seconds.
     const char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
     // the sync words for the radio the default are 0x2d and 0xd4
@@ -277,7 +279,7 @@ void rfm_69_loop() {
             {
                 // DEBUG_PRINTLN("line feed");DEBUG_PRINTLN(gps_data);
                 // this can be a GPRMC OR A GNRMC
-                if (strncmp(gps_data+3, "RMC", 3) != 0)
+                if (strncmp(gps_data+3, "GGA", 3) != 0)
                 {
                     gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
                     DEBUG_PRINTLN("Got a continue");
@@ -312,12 +314,14 @@ void rfm_69_loop() {
     // a little explantion here, gps_parsed data[2] is a pointer to a c string.
     // this string will always contain either an singe C string, "A" or "V".  If the string contains
     // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster
-    if (gps_parsed_data[2][0] == 'A')
+    if (gps_parsed_data[6][0] != '0')
     {   
       // put on an message that the coordinates are good
-      strcat(radiopacket,"A,");
-      // indexes 3, 4, 5, and 6 have the gps data
-        for (index = 3; index < 3 + 4; index++)
+      strcat(radiopacket,gps_parsed_data[6]);
+      strcat(radiopacket,"," );
+      
+      // indexes 2, 3, 4, and 5 have the gps data
+        for (index = 2; index < 6; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
             // do not put the comma after the last data
@@ -328,7 +332,7 @@ void rfm_69_loop() {
     else
     { 
       // put on a message that the data is bad
-      strcat(radiopacket,"N,");
+      strcat(radiopacket,"0,");
         for (index = 0; index < 3; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
@@ -350,7 +354,8 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
 
     The gps string is in the form of\n
     index =  012345678901234567890\n
-    Nemas =  $GPRMC,023936.000,A,1111.1234,N,12345.4321,W,0.54,243.41,180419,,,A*74
+    Nemas    =  $GPRMC,023936.000,A,1111.1234,N,12345.4321,W,0.54,243.41,180419,,,A*74
+    Nema GGA =  $GPGGA,091926.000,3113.3166,N,12121.2682,E,1,09,0.9,36.9,M,7.9,M,,0000*56<CR><LF>
 
     The commans in the string will be set to 0, breaking the string in to multiple strings.
     Each entry on char ** const array_pointer will point to the start of the data of each string.
@@ -364,14 +369,22 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     the commas in the string are replace by a zero, so the strings become null terminate.
        | Value Nema sentence | index in token array_pointers |
        |:-------------------:|:-----------------------------:|
-       |Nema sentence name |0|
-       |utc_time           |1|
-       |active             |2|
-       |lattitude          |3|
-       |n/s indicator      |4|
-       |logitude           |5|
-       |e/w indicator      |6|
+       |Nema sentence name      |0|
+       |utc_time                |1|
+       |lattitude               |2|
+       |n/s indicator           |3|
+       |logitude                |4|
+       |e/w indicator           |5|
+       |position fix indicator  |6|
 
+       Position Fix Indicator table
+       | Value | Description |
+       |:------:|:---------------------------------------------:|
+       | 0 | Fix not available or not valid|
+       | 1 | GPS SPS Mode, fix Valid |
+       | 2 | Differential GPS, SPS Mode, fix valid |
+       | 3 - 5| Not supported |
+       | 6 | Dead Reckoning Mode, fix valid |
     @param gps_raw_data a pointer to a null terminated string which contains a NEMA output string
                the pointer is a const, whilst the data is not
     @param array_pointers  an array of character pointers which will contain the address of the tokens
