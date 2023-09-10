@@ -40,8 +40,7 @@ int parse_gps_data(char *const, char **const);
 void write_gps(const char *, const u32);
 u8 calculate_checksum(const char *, u32);
 u8 bin_to_hex(u8 value);
-
-
+void blink(byte PIN, byte DELAY_MS, byte loops) ;
 
 /**
     @brief  create a name for the gpsSerial port
@@ -278,7 +277,7 @@ void rfm_69_loop() {
             if (gps_char == 10)
             {
                 // DEBUG_PRINTLN("line feed");DEBUG_PRINTLN(gps_data);
-                // this can be a GPRMC OR A GNRMC
+                // this is a GxGGA packet.  Not 0 ascii 0 in a GGA packet means no or invalid fix
                 if (strncmp(gps_data+3, "GGA", 3) != 0)
                 {
                     gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
@@ -339,11 +338,14 @@ void rfm_69_loop() {
         }
     }
     // Send a message to the DESTINATION!
+   
     if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
         // Now wait for a reply from the server
         reply_buffer_len = sizeof(reply_buffer);
+        
     } else {
         DEBUG_PRINTLN("Sending failed (no ack)");
+        blink(LED, 499, 1);
     }
 }
 
@@ -369,7 +371,7 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     the commas in the string are replace by a zero, so the strings become null terminate.
        | Value Nema sentence | index in token array_pointers |
        |:-------------------:|:-----------------------------:|
-       |Nema sentence name      |0|
+       |Nema sentence name      |0| $GxGGA, depends on the the type of fix. P=gps only,  N=gps add glosnoss
        |utc_time                |1|
        |lattitude               |2|
        |n/s indicator           |3|
@@ -474,7 +476,7 @@ u8 bin_to_hex(u8 value)
         return 'A' + (value -10);
 
 }
-void Blink(byte PIN, byte DELAY_MS, byte loops) 
+void blink(byte PIN, byte DELAY_MS, byte loops) 
 /**@brief this function will tokenize a gps string
  * 
  * this program will blink the led on the Arduino
