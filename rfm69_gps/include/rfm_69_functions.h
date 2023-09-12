@@ -7,4 +7,6 @@ extern int parse_gps_data(char *const, char **const);
 extern void write_gps(const char *, const int);
 extern void rfm_69_setup(void);
 extern void rfm_69_loop(void);
+
+
 #endif

@@ -37,10 +37,20 @@ for the entire text*/
 
 // function headers
 int parse_gps_data(char *const, char **const);
-void write_gps(const char *, const u32);
+void write_gps(const char *data, const u32 retrys);
 u8 calculate_checksum(const char *, u32);
 u8 bin_to_hex(u8 value);
 void blink(byte PIN, byte DELAY_MS, byte loops) ;
+#define RMC_HEADER 0
+#define RMC_TIME 1
+#define RMC_STATUS 2
+#define RMC_LATITUDE 3
+#define RMC_E_W_INDICATOR 4
+#define RMC_LONGITUDE 5
+#define RMC_N_S_INDICATOR 6
+#define RMC_SPEED_OVER_GROUND 7
+#define RMC_COURSE_OVER_GROUND 8
+#define RMC_DATE 9
 
 /**
     @brief  create a name for the gpsSerial port
@@ -149,12 +159,31 @@ void rfm_69_setup()
 
         @return Nothing
     */
-    // rmc packets do not work on new gps modules, use  GPGGA packets
-    //                                     0 1 3 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8
-    //                           "$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*2C"
+
+    // Supported NMEA Sentences:
+    // 0 NMEA_SEN_GLL, // GPGLL interval - Geographic Position - Latitude longitude
+    // 1 NMEA_SEN_RMC, // GPRMC interval - Recomended Minimum Specific GNSS Sentence
+    // 2 NMEA_SEN_VTG, // GPVTG interval - Course Over Ground and Ground Speed
+    // 3 NMEA_SEN_GGA, // GPGGA interval - GPS Fix Data
+    // 4 NMEA_SEN_GSA, // GPGSA interval - GNSS DOPS and Active Satellites
+    // 5 NMEA_SEN_GSV, // GPGSV interval - GNSS Satellites in View
+    // 6 NMEA_SEN_GRS, //GPGRS interval – GNSS Range Residuals
+    // 7 NMEA_SEN_GST, //GPGST interval – GNSS Pseudorange Errors Statistics
+    // 17 NMEA_SEN_ZDA, // GPZDA interval – Time & Date
+    // 18 NMEA_SEN_MCHN, //PMTKCHN interval – GNSS channel status
+    // 19 NMEA_SEN_DTM, //GPDTM interval – Datum reference
+    // Supported Frequency Setting
+    // 0 - Disabled or not supported sentence
+    // 1 - Output once every one position fix
+    // 2 - Output once every two position fixes
+    // 3 - Output once every three position fixes
+    // 4 - Output once every four position fixes
+    // 5 - Output once every five position fixes 
+    
     // const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
-    // set the oupout to be GGA
-    const char gps_init_data[] = "$PMTK314,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
+    // set the oupout to be RMC
+    //                                     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8
+    const char gps_init_data[] = "$PMTK314,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*29\r\n";
     // set the the gps to only transmit once every 10 seconds.
     const char gps_update_rate[] = "$PMTK220,10000*2F\r\n";
     // the sync words for the radio the default are 0x2d and 0xd4
@@ -277,8 +306,8 @@ void rfm_69_loop() {
             if (gps_char == 10)
             {
                 // DEBUG_PRINTLN("line feed");DEBUG_PRINTLN(gps_data);
-                // this is a GxGGA packet.  Not 0 ascii 0 in a GGA packet means no or invalid fix
-                if (strncmp(gps_data+3, "GGA", 3) != 0)
+                // this is a GxRMC packet.  Not 0 ascii 0 in a RMC packet means no or invalid fix
+                if (strncmp(gps_data+3, "RMC", 3) != 0)
                 {
                     gps_char_index = 0;  // reset the index to 0 because we did not get the expected packet
                     DEBUG_PRINTLN("Got a continue");
@@ -313,32 +342,32 @@ void rfm_69_loop() {
     // a little explantion here, gps_parsed data[2] is a pointer to a c string.
     // this string will always contain either an singe C string, "A" or "V".  If the string contains
     // and A, then the gps data is valid. One could use a strcmp but pointer[0] is faster
-    if (gps_parsed_data[6][0] != '0')
+    //   0     1         2   3       4    5       6   7    8      9
+    // $GPRMC,094330.000,A,3113.3156,N,12121.2686,E,0.51,193.93,171210,,,A*68<CR><LF>
+    if (gps_parsed_data[RMC_STATUS][0] == 'A')
     {   
-      // put on an message that the coordinates are good
-      strcat(radiopacket,gps_parsed_data[6]);
-      strcat(radiopacket,"," );
-      
-      // indexes 2, 3, 4, and 5 have the gps data
-        for (index = 2; index < 6; index++)
+      // indexes 1, 2,3,4,5,6 have the gps data
+        for (index = RMC_TIME; index < RMC_SPEED_OVER_GROUND; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
             // do not put the comma after the last data
-            if (index < 6)
-                strcat(radiopacket, ",");
+            strcat(radiopacket,",");
+            
         }
+        strcat(radiopacket, gps_parsed_data[RMC_DATE]);
     }
     else
     { 
       // put on a message that the data is bad
-      strcat(radiopacket,"0,");
+      strcat(radiopacket,"V,");
         for (index = 0; index < 3; index++)
         {
             strcat(radiopacket, gps_parsed_data[index]);
         }
     }
     // Send a message to the DESTINATION!
-   
+    DEBUG_PRINT("radio packet="); DEBUG_PRINTLN(radiopacket);
+
     if (rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
         // Now wait for a reply from the server
         reply_buffer_len = sizeof(reply_buffer);
@@ -357,7 +386,6 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     The gps string is in the form of\n
     index =  012345678901234567890\n
     Nemas    =  $GPRMC,023936.000,A,1111.1234,N,12345.4321,W,0.54,243.41,180419,,,A*74
-    Nema GGA =  $GPGGA,091926.000,3113.3166,N,12121.2682,E,1,09,0.9,36.9,M,7.9,M,,0000*56<CR><LF>
 
     The commans in the string will be set to 0, breaking the string in to multiple strings.
     Each entry on char ** const array_pointer will point to the start of the data of each string.
@@ -371,22 +399,22 @@ int parse_gps_data(char *const gps_raw_data, char **const array_pointers)
     the commas in the string are replace by a zero, so the strings become null terminate.
        | Value Nema sentence | index in token array_pointers |
        |:-------------------:|:-----------------------------:|
-       |Nema sentence name      |0| $GxGGA, depends on the the type of fix. P=gps only,  N=gps add glosnoss
+       |Nema sentence name      |0| $GxRMC, depends on the the type of fix. P=gps only,  N=gps add glosnoss
        |utc_time                |1|
        |lattitude               |2|
-       |n/s indicator           |3|
-       |logitude                |4|
-       |e/w indicator           |5|
-       |position fix indicator  |6|
+       |status                  |3|
+       |n/s indicator           |4|
+       |logitude                |5|
+       |e/w indicator           |6|
+       |speed over ground       |7|
+       |course over ground      |8|
+       |date                    |9|
 
-       Position Fix Indicator table
+       Status
        | Value | Description |
        |:------:|:---------------------------------------------:|
-       | 0 | Fix not available or not valid|
-       | 1 | GPS SPS Mode, fix Valid |
-       | 2 | Differential GPS, SPS Mode, fix valid |
-       | 3 - 5| Not supported |
-       | 6 | Dead Reckoning Mode, fix valid |
+       | V |  fix not valid | 
+       | A | fix valid |
     @param gps_raw_data a pointer to a null terminated string which contains a NEMA output string
                the pointer is a const, whilst the data is not
     @param array_pointers  an array of character pointers which will contain the address of the tokens
